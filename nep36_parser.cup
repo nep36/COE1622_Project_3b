@@ -1,0 +1,276 @@
+/* Noah Perryman <nep36@pitt.edu>
+ * CS 1622
+ * Project 3a
+*/
+
+import java.util.*;
+import java_cup.runtime.*;
+import java.lang.*;
+import syntaxtree.*;
+import visitor.*;
+
+scan with {:
+    return lexer.next_token();
+:};
+
+parser code {:
+    nep36_lexer lexer;
+    public java_cup.runtime.Symbol currentSymbol;
+    public nep36_parser(nep36_lexer lex) {
+        super(lex);
+        lexer = lex;
+    }
+    public void syntax_error(Symbol currentToken) {
+        System.err.println("Parse error at line " + currentToken.left + ", column " + cur_token.right);
+    }
+:};
+
+/*Terminals*/
+terminal CLASS;
+terminal PUBLIC;
+terminal STATIC;
+terminal VOID;
+terminal MAIN;
+terminal STRING;
+terminal EXTENDS;
+terminal RETURN;
+terminal IF;
+terminal ELSE;
+terminal WHILE;
+terminal PRINTLN;
+terminal LENGTH;
+terminal THIS;
+terminal NEW;
+terminal INT;
+terminal BOOL;
+terminal TRUE;
+terminal FALSE;
+terminal LPAREN;
+terminal RPAREN;
+terminal LBRACE;
+terminal RBRACE;
+terminal LBRACKET;
+terminal RBRACKET;
+terminal SEMI;
+terminal COMMA;
+terminal PERIOD;
+terminal EQUALS;
+terminal AND;
+terminal LESS;
+terminal PLUS;
+terminal MINUS;
+terminal MULT;
+terminal NOT;
+terminal java.lang.Number INTLIT;
+terminal java.lang.String ID;
+
+/*Non Terminals*/
+non terminal Program Goal;
+non terminal MainClass MainClass;
+non terminal ClassDecl ClassDeclaration;
+non terminal ClassDeclList ClassDeclarationChain;
+non terminal VarDecl VarDeclaration;
+non terminal VarDeclList VarDeclarationChain;
+non terminal MethodDecl MethodDeclaration;
+non terminal MethodDeclList MethodDeclarationChain;
+non terminal Type Type;
+non terminal FormalList TypeChainComma;
+non terminal Statement Statement;
+non terminal StatementList StatementChain;
+non terminal Exp Expression;
+non terminal ExpList ExpressionChainComma;
+non terminal Identifier Identifier;
+
+/*Precedences*/
+precedence right EQUALS;
+precedence left AND;
+precedence left LESS;
+precedence left PLUS, MINUS;
+precedence left MULT;
+precedence right NEW;
+precedence right NOT;
+precedence left PERIOD, LBRACKET, RBRACKET, LPAREN, RPAREN;
+
+/*Starting non terminal*/
+start with Goal;
+
+/*The grammar for the parser*/
+Goal ::= MainClass:mc ClassDeclarationChain:cdl
+         {: RESULT = new Program(mc, cdl); :}
+         ;
+
+MainClass ::= CLASS:c Identifier:id1 LBRACE PUBLIC STATIC VOID MAIN LPAREN STRING LBRACKET RBRACKET Identifier:id2 RPAREN LBRACE Statement:st RBRACE RBRACE
+              {: RESULT = new MainClass(id1, id2, st); :}
+              | CLASS Identifier:id1 LBRACE PUBLIC STATIC VOID MAIN LPAREN STRING LBRACKET RBRACKET Identifier:id2 RPAREN LBRACE RBRACE RBRACE
+              {: RESULT = new MainClass(id1, id2, null); :}
+             ;
+
+ClassDeclaration ::= CLASS Identifier:id1 EXTENDS Identifier:id2 LBRACE VarDeclarationChain:vdc MethodDeclarationChain:mdc RBRACE
+                     {: RESULT = new ClassDeclExtends(id1, id2, vdc, mdc); :}
+                     | CLASS Identifier:id LBRACE VarDeclarationChain:vdc MethodDeclarationChain:mdc RBRACE
+                     {: RESULT = new ClassDeclSimple(id, vdc, mdc); :}
+                     ;
+
+ClassDeclarationChain ::= ClassDeclaration:cd ClassDeclarationChain:cdc
+                          {: if(cdc == null) {
+                                cdc = new ClassDeclList();
+                             }
+                             cdc.addElement(cd);
+                             RESULT = cdc;
+                          :}
+                          |
+                          {: RESULT = new ClassDeclList(); :}
+                          ;
+
+VarDeclaration ::= Type:tp Identifier:id SEMI
+                   {: RESULT = new VarDecl(tp, id); :}
+                   ;
+
+VarDeclarationChain ::= VarDeclarationChain:vdc VarDeclaration:vd
+                        {: if(vdc == null) {
+                                vdc = new VarDeclList();
+                           }
+                           vdc.addElement(vd);
+                           RESULT = vdc;
+                        :}
+                        |
+                        {: RESULT = new VarDeclList(); :}
+                        ;
+
+MethodDeclaration ::= PUBLIC Type:tp1 Identifier:id1 LPAREN Type:tp2 Identifier:id2 TypeChainComma:tpcc RPAREN LBRACE VarDeclarationChain:vdc StatementChain:stc RETURN Expression:e SEMI RBRACE
+                      {: Formal temp = new Formal(tp2, id2);
+                         FormalList list = new FormalList();
+                         list.addElement(temp);
+                         for(int i = 0; i < tpcc.size(); i++) {
+                             list.addElement(tpcc.elementAt(i));
+                         }
+                         RESULT = new MethodDecl(tp1, id1, list, vdc, stc, e);
+                      :}
+                      | PUBLIC Type:tp Identifier:id LPAREN RPAREN LBRACE VarDeclarationChain:vdc StatementChain:stc RETURN Expression:e SEMI RBRACE
+                      {: FormalList list = new FormalList();
+                         RESULT = new MethodDecl(tp, id, list, vdc, stc, e);
+                      :}
+                      ;
+
+MethodDeclarationChain ::= MethodDeclaration:md MethodDeclarationChain:mdc
+                           {: if(mdc == null) {
+                                mdc = new MethodDeclList();
+                              }
+                              mdc.addElement(md);
+                              RESULT = mdc;
+                           :}
+                           |
+                           {: RESULT = new MethodDeclList(); :}
+                           ;
+
+Type ::= INT RBRACKET LBRACKET
+         {: RESULT = new IntArrayType(); :}
+         | BOOL
+         {: RESULT = new BooleanType(); :}
+         | INT
+         {: RESULT = new IntegerType(); :}
+         | Identifier:id
+         {: RESULT = new IdentifierType(id.toString()); :}
+         ;
+
+TypeChainComma ::= COMMA Type:tp Identifier:id TypeChainComma:tpc
+                   {: Formal temp = new Formal(tp, id);
+                      if(tpc == null) {
+                          tpc = new FormalList();
+                      }
+                      tpc.addElement(temp);
+                      RESULT = tpc;
+                   :}
+                   |
+                   {: RESULT = new FormalList(); :}
+                   ;
+
+Statement ::= LBRACE StatementChain:stc RBRACE
+              {: RESULT = new Block(stc); :}
+              | IF LPAREN Expression:e RPAREN Statement:st1 ELSE Statement:st2
+              {: RESULT = new If(e, st1, st2); :}
+              | WHILE LPAREN Expression:e RPAREN Statement:st
+              {: RESULT = new While(e, st); :}
+              | PRINTLN LPAREN Expression:e RPAREN SEMI
+              {: RESULT = new Print(e); :}
+              | Identifier:id EQUALS Expression:e SEMI
+              {: RESULT = new Assign(id, e); :}
+              | Identifier:id LBRACKET Expression:e1 RBRACKET EQUALS Expression:e2 SEMI
+              {: RESULT = new ArrayAssign(id, e1, e2); :}
+              ;
+
+StatementChain ::= Statement:st StatementChain:stc
+                   {: if(stc == null) {
+                         stc = new StatementList();
+                      }
+                      stc.addElement(st);
+                      RESULT = stc;
+                   :}
+                   |
+                   {: RESULT = new StatementList(); :}
+                   ;
+
+Expression ::=   Expression:e1 AND Expression:e2
+                 {: RESULT = new And(e1, e2); :}
+                 |  Expression:e1 LESS Expression:e2
+                 {: RESULT = new LessThan(e1, e2); :}
+                 |  Expression:e1 PLUS Expression:e2
+                 {: RESULT = new Plus(e1, e2); :}
+                 |  Expression:e1 MINUS Expression:e2
+                 {: RESULT = new Minus(e1, e2); :}
+                 |  Expression:e1 MULT Expression:e2
+                 {: RESULT = new Times(e1, e2); :}
+                 |  Expression:e1 LBRACKET Expression:e2 RBRACKET
+                 {: RESULT = new ArrayLookup(e1, e2); :}
+                 |  Expression:e PERIOD LENGTH
+                 {: RESULT = new ArrayLength(e); :}
+                 |  Expression:e1 PERIOD Identifier:id LPAREN Expression:e2 ExpressionChainComma:ecc LPAREN
+                 {: ExpList list = new ExpList();
+                    list.addElement(e2);
+                    for(int i = 0; i < ecc.size(); i++) {
+                        list.addElement(ecc.elementAt(i));
+                    }
+                    RESULT = new Call(e1, id, list);
+                 :}
+                 |  Expression:e PERIOD Identifier:id LPAREN RPAREN
+                 {: ExpList ec = new ExpList();
+                    RESULT = new Call(e, id, ec);
+                 :}
+                 |  INTLIT:il
+                 {: Integer intVal = Integer.parseInt(il.toString());
+                    RESULT = new IntegerLiteral(intVal);
+                 :}
+                 |  TRUE
+                 {: RESULT = new True(); :}
+                 |  FALSE
+                 {: RESULT = new False(); :}
+                 |  Identifier: id
+                 {: RESULT = new IdentifierExp(id.toString()); :}
+                 |  THIS
+                 {: RESULT = new This(); :}
+                 |  NEW INT LBRACKET Expression:e RBRACKET
+                 {: RESULT = new NewArray(e); :}
+                 |  NEW Identifier:id LPAREN RPAREN
+                 {: RESULT = new NewObject(id); :}
+                 |  NOT Expression:e
+                 {: RESULT = new Not(e); :}
+                 |  LPAREN Expression:e RPAREN
+                 {: RESULT = e; :}
+                 ;
+
+ExpressionChainComma ::= COMMA Expression:e ExpressionChainComma:ec
+                         {: if(ec == null) {
+                                ec = new ExpList();
+                            }
+                            ec.addElement(e);
+                            RESULT = ec;
+                         :}
+                         |
+                         {: RESULT = new ExpList(); :}
+                         ;
+
+Identifier ::= ID:id
+               {: String s = id.toString();
+                  RESULT = new Identifier(s);
+               :}
+               ;
